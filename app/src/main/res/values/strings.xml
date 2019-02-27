@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">LocationTestApp</string>
+    <string name="google_maps_key">AIzaSyBZpeI5Xkawgw_JnJnwf75Jy9w07IeiV7c</string>
+    <string name="google_maps_key_2">AIzaSyC-RFWQJU7U-qx4pLtqkx0o6ZulQjMMvSI</string>
+</resources>
