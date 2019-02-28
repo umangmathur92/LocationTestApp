@@ -1,6 +1,8 @@
 package com.umangmathur.locationtestapp;
 
+import android.app.Dialog;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.location.Address;
 import android.location.Geocoder;
 import android.location.Location;
@@ -8,6 +10,8 @@ import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
 import android.util.Log;
 import android.view.View;
 import android.widget.ImageButton;
@@ -32,7 +36,10 @@ import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.Polyline;
+import com.google.android.gms.maps.model.PolylineOptions;
 import com.google.android.gms.tasks.OnSuccessListener;
+import com.umangmathur.locationtestapp.RoutesAdapter.ClickHandler;
 
 import org.json.JSONObject;
 
@@ -58,7 +65,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
     private String placeIdSource = "", placeIdDest = "";
     private GoogleMap googleMap;
     private RequestQueue queue;
-    private HashMap<String, String> routesToBeDisplayed = new LinkedHashMap<>();
+    private List<Step> stepsToBeDisplayedInPopUp = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -216,22 +223,52 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                 List<Step> stepList = leg.getStepList();
                 boolean isValidList = verifyValidityOfList(stepList);
                 if (isValidList) {
-                    HashMap<String, String> busRouteMap = getBusRouteHashMap(stepList);
-                    routesToBeDisplayed.putAll(busRouteMap);
+                    Step specificStep = getSpecificStep(stepList);
+                    stepsToBeDisplayedInPopUp.add(specificStep);
                 }
             }
         }
-        for (String name : routesToBeDisplayed.keySet()) {
-            String polyLinePoints = routesToBeDisplayed.get(name);
+
+        Log.d(TAG, "i was called");
+        for (Step step : stepsToBeDisplayedInPopUp) {
+            String polyLinePoints = step.getPolyLinePoints();
+            String name = step.getTransitDetails().getName() + " - " + step.getTransitDetails().getShortName();
             Log.d(TAG, name + " , " + polyLinePoints);
-            
-
-
         }
+        showPopUp(stepsToBeDisplayedInPopUp);
     }
 
-    private HashMap<String, String> getBusRouteHashMap(List<Step> stepList) {
-        for (Step step: stepList) {
+    private void showPopUp(List<Step> stepsToBeDisplayedInPopUp) {
+        RoutesAdapter routesAdapter = new RoutesAdapter(stepsToBeDisplayedInPopUp, getRecyclerViewClickHandler());
+        Dialog dialog = new Dialog(this);
+        dialog.setContentView(R.layout.popup_dialog);
+        RecyclerView recyclerView = dialog.findViewById(R.id.recyclerView);
+        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        recyclerView.setAdapter(routesAdapter);
+        dialog.show();
+    }
+
+    private ClickHandler getRecyclerViewClickHandler() {
+        return new ClickHandler() {
+            @Override
+            public OnClickListener onItemClick(final Step step) {
+                return new OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        showToast(step.getPolyLinePoints());
+                        List<LatLng> list = decodePoly(step.getPolyLinePoints());
+                        //LatLng latLng = new LatLng(step.getPolyLinePoints())
+                        //googleMap.addPolyline(new PolylineOptions().add)
+                        Polyline line = googleMap.addPolyline(new PolylineOptions().addAll(list).width(5).color(Color.RED));
+                        googleMap.addPolyline(new PolylineOptions().addAll(list));
+                    }
+                };
+            }
+        };
+    }
+
+    private Step getSpecificStep(List<Step> stepList) {
+        for (Step step : stepList) {
             String travelMode = step.getTravelMode();
             if (travelMode.equals("TRANSIT")) {
                 String polyLinePoints = step.getPolyLinePoints();
@@ -240,7 +277,7 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
                 String fullName = name + " - " + shortName;
                 HashMap<String, String> map = new LinkedHashMap<>();
                 map.put(fullName, polyLinePoints);
-                return map;
+                return step;
             }
         }
         return null;
@@ -255,6 +292,36 @@ public class MainActivity extends AppCompatActivity implements OnClickListener {
             }
         }
         return i == 1;//Return true if if TRANSIT occurs only once
+    }
+
+    private List<LatLng> decodePoly(String encoded) {
+        List<LatLng> poly = new ArrayList<>();
+        int index = 0, len = encoded.length();
+        int lat = 0, lng = 0;
+        while (index < len) {
+            int b, shift = 0, result = 0;
+            do {
+                b = encoded.charAt(index++) - 63;
+                result |= (b & 0x1f) << shift;
+                shift += 5;
+            } while (b >= 0x20);
+            int dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+            lat += dlat;
+
+            shift = 0;
+            result = 0;
+            do {
+                b = encoded.charAt(index++) - 63;
+                result |= (b & 0x1f) << shift;
+                shift += 5;
+            } while (b >= 0x20);
+            int dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+            lng += dlng;
+            LatLng p = new LatLng((((double) lat / 1E5)), (((double) lng / 1E5)));
+            poly.add(p);
+        }
+
+        return poly;
     }
 
 }
